@@ -1,0 +1,1 @@
+ALTER TABLE `CMSPage` ADD COLUMN `design` JSON NULL;

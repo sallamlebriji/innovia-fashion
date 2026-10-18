@@ -1,0 +1,82 @@
+name: innovia-production
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?Set a dedicated production DATABASE_URL}
+  ADMIN_ORIGIN: ${ADMIN_ORIGIN:?Set HTTPS ADMIN_ORIGIN}
+  STOREFRONT_ORIGIN: ${STOREFRONT_ORIGIN:?Set HTTPS STOREFRONT_ORIGIN}
+  APP_SIGNING_SECRET: ${APP_SIGNING_SECRET:?Set a random signing secret}
+  MEDIA_DIR: /data/media
+  MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
+  MEDIA_S3_BUCKET: ${MEDIA_S3_BUCKET:-}
+  MEDIA_S3_REGION: ${MEDIA_S3_REGION:-eu-west-1}
+  MEDIA_S3_ENDPOINT: ${MEDIA_S3_ENDPOINT:-}
+  MEDIA_S3_PREFIX: ${MEDIA_S3_PREFIX:-innovia}
+  MEDIA_S3_FORCE_PATH_STYLE: ${MEDIA_S3_FORCE_PATH_STYLE:-false}
+  MEDIA_S3_ENCRYPTION: ${MEDIA_S3_ENCRYPTION:-AES256}
+  MEDIA_S3_KMS_KEY_ID: ${MEDIA_S3_KMS_KEY_ID:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+  REDIS_URL: ${REDIS_URL:?Set a dedicated persistent REDIS_URL}
+  TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+  MEDIA_TENANT_LIMIT_MB: ${MEDIA_TENANT_LIMIT_MB:-250}
+  AI_PROVIDER_APPROVED: ${AI_PROVIDER_APPROVED:-false}
+  FAL_KEY: ${FAL_KEY:-}
+  BILLING_PROVIDER_APPROVED: ${BILLING_PROVIDER_APPROVED:-false}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  MAIL_PROVIDER_APPROVED: ${MAIL_PROVIDER_APPROVED:-false}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  MAIL_FROM: ${MAIL_FROM:-}
+  PUSH_PROVIDER_APPROVED: ${PUSH_PROVIDER_APPROVED:-false}
+  EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+  AR_PROVIDER_APPROVED: ${AR_PROVIDER_APPROVED:-false}
+  CAMERA_KIT_WEB_TOKEN: ${CAMERA_KIT_WEB_TOKEN:-}
+services:
+  api:
+    build: {context: .., target: api}
+    environment: *api-env
+    volumes: ["media:/data/media"]
+    ports: ["127.0.0.1:4001:4001"]
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 65s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  admin:
+    build: {context: .., target: admin}
+    depends_on: {api: {condition: service_healthy}}
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+  storefront:
+    build: {context: .., target: storefront}
+    environment: {NODE_ENV: production, STOREFRONT_API_URL: "http://api:4001"}
+    depends_on: {api: {condition: service_healthy}}
+    ports: ["127.0.0.1:3000:3000"]
+    restart: unless-stopped
+    init: true
+  migrate:
+    build: {context: .., target: api}
+    environment: *api-env
+    command: ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
+    profiles: ["release"]
+  bootstrap:
+    build: {context: .., target: api}
+    environment:
+      <<: *api-env
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_STARTER_PRICE: ${BOOTSTRAP_STARTER_PRICE:-299.00}
+    command: ["node", "node_modules/tsx/dist/cli.mjs", "scripts/bootstrap.ts"]
+    profiles: ["release"]
+  migrate-media:
+    build: {context: .., target: api}
+    environment: *api-env
+    volumes: ["media:/data/media"]
+    command: ["node", "node_modules/tsx/dist/cli.mjs", "scripts/migrate-media-storage.mts", "--maintenance-confirmed"]
+    profiles: ["maintenance"]
+volumes:
+  media:

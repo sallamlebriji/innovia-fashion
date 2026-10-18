@@ -1,0 +1,10 @@
+{
+  "name": "@innovia/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "exports": "./tokens.css",
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.2.0",
+    "@fontsource/instrument-serif": "^5.2.0"
+  }
+}

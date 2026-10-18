@@ -1,0 +1,1 @@
+ALTER TABLE `Campaign` ADD COLUMN `lastCustomerId` VARCHAR(191) NOT NULL DEFAULT '';

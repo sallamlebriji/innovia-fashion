@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "INNOVIA",
+    "slug": "innovia-fashion-os",
+    "scheme": "innovia",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-notifications",
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose your own photo for a private fitting preview.",
+          "cameraPermission": "Take your own photo for a private fitting preview.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "ios": { "supportsTablet": true },
+    "android": { "package": "com.innovia.fashion" }
+  }
+}

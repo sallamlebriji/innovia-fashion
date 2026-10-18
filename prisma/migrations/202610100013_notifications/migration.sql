@@ -1,0 +1,14 @@
+ALTER TABLE Notification ADD COLUMN kind VARCHAR(191) NOT NULL DEFAULT 'TRANSACTIONAL';
+CREATE TABLE PushDevice (
+ id VARCHAR(191) NOT NULL PRIMARY KEY, tenantId VARCHAR(191) NOT NULL, customerId VARCHAR(191) NOT NULL,
+ token VARCHAR(300) NOT NULL, active BOOLEAN NOT NULL DEFAULT true, registeredAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+ UNIQUE INDEX PushDevice_tenantId_customerId_token_key(tenantId,customerId,token),
+ CONSTRAINT PushDevice_customer_fkey FOREIGN KEY(tenantId,customerId) REFERENCES Customer(tenantId,id) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE PushDelivery (
+ id VARCHAR(191) NOT NULL PRIMARY KEY, notificationId VARCHAR(191) NOT NULL, deviceId VARCHAR(191) NOT NULL,
+ status VARCHAR(191) NOT NULL DEFAULT 'CLAIMED', receiptId VARCHAR(191) NULL, createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), checkedAt DATETIME(3) NULL,
+ UNIQUE INDEX PushDelivery_notificationId_deviceId_key(notificationId,deviceId),
+ CONSTRAINT PushDelivery_notification_fkey FOREIGN KEY(notificationId) REFERENCES Notification(id) ON DELETE CASCADE ON UPDATE CASCADE,
+ CONSTRAINT PushDelivery_device_fkey FOREIGN KEY(deviceId) REFERENCES PushDevice(id) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

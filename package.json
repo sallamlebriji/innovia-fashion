@@ -1,0 +1,61 @@
+{
+  "name": "innovia-fashion-os",
+  "version": "0.1.0",
+  "private": true,
+  "overrides": {
+    "uuid": "^11.1.1",
+    "@snap/camera-kit": {
+      "uuid": "^11.1.1"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "^8.0.0",
+      "effect": "^3.20.0"
+    }
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/merchant-admin",
+    "apps/storefront",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm run dev -w @innovia/api",
+    "dev:admin": "npm run dev -w @innovia/merchant-admin",
+    "dev:storefront": "npm run dev -w @innovia/storefront",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mysql-local.ps1",
+    "media:migrate": "tsx scripts/migrate-media-storage.mts",
+    "typecheck": "tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/merchant-admin/tsconfig.json --noEmit && tsc -p apps/storefront/tsconfig.json --noEmit",
+    "lint": "eslint apps packages prisma tests",
+    "test": "vitest run",
+    "build": "npm run build -w @innovia/api && npm run build -w @innovia/merchant-admin && npm run build -w @innovia/storefront",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@playwright/test": "^1.55.0",
+    "@snap/camera-kit": "^1.22.0",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@types/supertest": "^6.0.3",
+    "dotenv": "^17.2.1",
+    "esbuild": "^0.25.9",
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "prisma": "6.19.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^5.0.3"
+  }
+}

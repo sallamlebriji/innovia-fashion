@@ -1,0 +1,1034 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+  PLATFORM_ADMIN
+}
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  IN_FULFILMENT
+}
+enum Channel {
+  POS
+  ONLINE
+}
+model SubscriptionPlan {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  monthlyPrice Decimal  @db.Decimal(12, 2)
+  productLimit Int
+  storeLimit   Int
+  employeeLimit Int @default(10)
+  aiCredits Int @default(0)
+  trialDays Int @default(14)
+  features Json?
+  tenants      Tenant[]
+  invoices SubscriptionInvoice[]
+  recurringBilling RecurringBilling[]
+}
+model Tenant {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  currency     String   @default("MAD")
+  locale       String   @default("en")
+  demo         Boolean  @default(false)
+  accent       String   @default("#b1946b")
+  heroTitle    String   @default("A considered collection.")
+  heroSubtitle String   @default("Modern essentials. Enduring style.")
+  heroImage    String   @default("") @db.VarChar(2048)
+  createdAt    DateTime @default(now())
+  planId       String
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  stores       Store[]
+  users        User[]
+  products     Product[]
+  variants     ProductVariant[]
+  inventory    Inventory[]
+  movements    StockMovement[]
+  orders       Order[]
+  orderItems   OrderItem[]
+  customers    Customer[]
+  auditLogs    AuditLog[]
+  commands     IdempotentCommand[]
+  suppliers    Supplier[]
+  purchases    PurchaseOrder[]
+  purchaseItems PurchaseOrderItem[]
+  transfers    StockTransfer[]
+  counts       StockCount[]
+  productMedia ProductMedia[]
+  returns ReturnRecord[]
+  returnItems ReturnItem[]
+  loyaltyProgram LoyaltyProgram?
+  loyaltyAccounts LoyaltyAccount[]
+  loyaltyEntries LoyaltyEntry[]
+  loyaltyTiers LoyaltyTier[]
+  rewards Reward[]
+  redemptions RewardRedemption[]
+  customerSessions CustomerSession[]
+  addresses CustomerAddress[]
+  consents CustomerConsent[]
+  wishlistItems WishlistItem[]
+  deliveryZones DeliveryZone[]
+  pages CMSPage[]
+  sections CMSSection[]
+  notifications Notification[]
+  mediaAssets MediaAsset[]
+  staffInvites StaffInvite[]
+  supportTickets SupportTicket[]
+  supportMessages SupportMessage[]
+  subscriptionStatus String @default("ACTIVE")
+  paidThrough DateTime?
+  invoices SubscriptionInvoice[]
+  billingEvents BillingEvent[]
+  recurringBilling RecurringBilling[]
+  recurringBillingEvents RecurringBillingEvent[]
+  trialEndsAt DateTime?
+  tryOnEnabled Boolean @default(false)
+  tryOnJobs TryOnJob[]
+  aiUsage AIUsage[]
+  aiCredits AICreditEntry[]
+  taxRate Decimal @default(0) @db.Decimal(5, 2)
+  refundShipping Boolean @default(false)
+  legalName String @default("")
+  invoiceAddress String @default("") @db.VarChar(500)
+  taxIdentifier String @default("")
+  contactEmail String @default("")
+  contactPhone String @default("")
+  returnPolicy String @default("") @db.VarChar(5000)
+  deliveryPolicy String @default("") @db.VarChar(5000)
+  reservationMinutes Int @default(60)
+  requireCashSession Boolean @default(false)
+  cashSessions CashSession[]
+  cashMovements CashMovement[]
+  coupons Coupon[]
+  campaigns Campaign[]
+  campaignDeliveries CampaignDelivery[]
+  recoveryTokens RecoveryToken[]
+}
+model Store {
+  id        String @id @default(cuid())
+  tenantId  String
+  name      String
+  city      String
+  kind      String @default("STORE")
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  inventory Inventory[]
+  movements StockMovement[]
+  orders    Order[]
+  purchases PurchaseOrder[]
+  outboundTransfers StockTransfer[] @relation("TransferSource")
+  inboundTransfers StockTransfer[] @relation("TransferDestination")
+  counts StockCount[]
+  cashSessions CashSession[]
+  @@unique([tenantId, id])
+}
+model User {
+  id           String @id @default(cuid())
+  tenantId     String?
+  name         String
+  email        String @unique
+  passwordHash String
+  role         Role @default(OWNER)
+  createdAt    DateTime @default(now())
+  tenant       Tenant? @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sessions     Session[]
+  recoveryTokens RecoveryToken[]
+  active       Boolean @default(true)
+  @@index([tenantId])
+}
+model Session {
+  id        String @id
+  userId    String
+  csrfToken String
+  expiresAt DateTime
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([expiresAt])
+}
+model RecoveryToken {
+  id String @id
+  tenantId String?
+  userId String?
+  customerId String?
+  email String
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  tenant Tenant? @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  user User? @relation(fields:[userId],references:[id],onDelete:Cascade)
+  customer Customer? @relation(fields:[tenantId,customerId],references:[tenantId,id],onDelete:Cascade)
+  @@index([expiresAt])
+}
+model PlatformAudit {
+  id String @id @default(cuid())
+  actorId String
+  action String
+  entityId String
+  details Json
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+model EmailMessage {
+  id String @id @default(cuid())
+  payload String @db.Text
+  status String @default("QUEUED")
+  attempts Int @default(0)
+  leaseUntil DateTime?
+  providerId String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([status,expiresAt])
+}
+model Product {
+  id          String @id @default(cuid())
+  tenantId    String
+  name        String
+  description String @db.Text
+  category    String
+  brand       String
+  collection  String
+  imageUrl    String @db.VarChar(2048)
+  status      ProductStatus @default(ACTIVE)
+  season      String @default("")
+  audience    String @default("")
+  material    String @default("") @db.VarChar(200)
+  fit         String @default("")
+  care        String @default("") @db.VarChar(2000)
+  sizeChart   Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variants    ProductVariant[]
+  media       ProductMedia[]
+  wishlisted WishlistItem[]
+  tryOnEnabled Boolean @default(false)
+  tryOnImageUrl String @default("") @db.VarChar(2048)
+  arLensId String @default("")
+  arGroupId String @default("")
+  tryOnJobs TryOnJob[]
+  @@unique([tenantId, id])
+  @@index([tenantId, status, category])
+  @@index([tenantId, createdAt])
+}
+model ProductVariant {
+  id        String @id @default(cuid())
+  tenantId  String
+  productId String
+  sku       String
+  size      String
+  color     String
+  price     Decimal @db.Decimal(12, 2)
+  cost      Decimal @db.Decimal(12, 2)
+  barcode   String @default("")
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product   Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  inventory Inventory[]
+  movements StockMovement[]
+  orderItems OrderItem[]
+  purchaseItems PurchaseOrderItem[]
+  transfers StockTransfer[]
+  counts StockCount[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, sku])
+  @@index([tenantId, productId])
+}
+model Inventory {
+  id           String @id @default(cuid())
+  tenantId     String
+  variantId    String
+  storeId      String
+  onHand       Int @default(0)
+  reserved     Int @default(0)
+  reorderPoint Int @default(5)
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variant      ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  store        Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, variantId, storeId])
+  @@index([tenantId, storeId])
+}
+model StockMovement {
+  id        String @id @default(cuid())
+  tenantId  String
+  variantId String
+  storeId   String
+  type      String
+  quantity  Int
+  reason    String @db.VarChar(1000)
+  actorId   String
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variant   ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  store     Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, createdAt])
+}
+model Customer {
+  id        String @id @default(cuid())
+  tenantId  String
+  name      String
+  email     String
+  phone     String @default("")
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orders    Order[]
+  loyaltyAccount LoyaltyAccount?
+  passwordHash String?
+  birthday DateTime?
+  notes String @default("") @db.VarChar(2000)
+  preferences Json?
+  sessions CustomerSession[]
+  addresses CustomerAddress[]
+  consents CustomerConsent[]
+  wishlist WishlistItem[]
+  notifications Notification[]
+  tryOnJobs TryOnJob[]
+  campaignDeliveries CampaignDelivery[]
+  @@unique([tenantId, id])
+  recoveryTokens RecoveryToken[]
+  @@unique([tenantId, email])
+  pushDevices PushDevice[]
+}
+model Order {
+  id            String @id @default(cuid())
+  tenantId      String
+  storeId       String
+  customerId    String?
+  number        String @unique
+  customerName  String
+  channel       Channel
+  status        OrderStatus
+  paymentMethod String
+  total         Decimal @db.Decimal(12, 2)
+  currency      String @default("MAD")
+  refundedTotal Decimal @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal @default(0) @db.Decimal(12, 2)
+  loyaltyPoints Int @default(0)
+  shippingTotal Decimal @default(0) @db.Decimal(12, 2)
+  taxTotal Decimal @default(0) @db.Decimal(12, 2)
+  taxRate Decimal @default(0) @db.Decimal(5, 2)
+  shippingAddress Json?
+  deliveryZoneId String?
+  deliveryStatus String @default("AWAITING_COLLECTION")
+  carrier String @default("")
+  trackingNumber String @default("")
+  trackingTokenHash String?
+  reservationExpiresAt DateTime?
+  refundShipping Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  store         Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  customer      Customer? @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  items         OrderItem[]
+  returns ReturnRecord[] @relation("OriginalReturn")
+  exchangeReturn ReturnRecord? @relation("ExchangeReplacement")
+  loyaltyEntries LoyaltyEntry[]
+  redemption RewardRedemption? @relation("UsedReward")
+  deliveryZone DeliveryZone? @relation(fields: [tenantId, deliveryZoneId], references: [tenantId, id], onDelete: Restrict)
+  cashierId String @default("")
+  couponId String?
+  coupon Coupon? @relation(fields: [tenantId,couponId],references:[tenantId,id],onDelete:Restrict)
+  cashMovements CashMovement[]
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt])
+}
+model OrderItem {
+  id        String @id @default(cuid())
+  tenantId  String
+  orderId   String
+  variantId String
+  name      String
+  sku       String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  unitCost Decimal @default(0) @db.Decimal(12, 2)
+  costCaptured Boolean @default(false)
+  returnedQuantity Int @default(0)
+  returnedAmount Decimal @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal @default(0) @db.Decimal(12, 2)
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order     Order @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  variant   ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  returnItems ReturnItem[]
+  @@unique([tenantId, id])
+  @@index([tenantId, orderId])
+}
+model AuditLog {
+  id        String @id @default(cuid())
+  tenantId  String
+  actorId   String
+  action    String
+  entityId  String
+  details   Json
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@index([tenantId, createdAt])
+}
+model IdempotentCommand {
+  id          String @id @default(cuid())
+  tenantId    String
+  key         String @db.VarChar(100)
+  fingerprint String
+  response    Json
+  createdAt   DateTime @default(now())
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@unique([tenantId, key])
+}
+
+model ProductMedia {
+  id String @id @default(cuid())
+  tenantId String
+  productId String
+  url String @db.VarChar(2048)
+  alt String @default("") @db.VarChar(200)
+  kind String @default("IMAGE")
+  position Int @default(0)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+  @@index([tenantId, productId, position])
+}
+
+model Supplier {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  email String @default("")
+  phone String @default("")
+  address String @default("") @db.VarChar(500)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  purchases PurchaseOrder[]
+  @@unique([tenantId, id])
+  @@index([tenantId, name])
+}
+
+model PurchaseOrder {
+  id String @id @default(cuid())
+  tenantId String
+  supplierId String
+  storeId String
+  number String @unique
+  status String @default("DRAFT")
+  currency String
+  total Decimal @db.Decimal(12, 2)
+  notes String @default("") @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  receivedAt DateTime?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplier Supplier @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict)
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  items PurchaseOrderItem[]
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt])
+}
+
+model PurchaseOrderItem {
+  id String @id @default(cuid())
+  tenantId String
+  purchaseOrderId String
+  variantId String
+  quantity Int
+  unitCost Decimal @db.Decimal(12, 2)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, purchaseOrderId])
+}
+
+model StockTransfer {
+  id String @id @default(cuid())
+  tenantId String
+  variantId String
+  fromStoreId String
+  toStoreId String
+  quantity Int
+  reason String @db.VarChar(500)
+  actorId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variant ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  fromStore Store @relation("TransferSource", fields: [tenantId, fromStoreId], references: [tenantId, id], onDelete: Restrict)
+  toStore Store @relation("TransferDestination", fields: [tenantId, toStoreId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, createdAt])
+}
+
+model StockCount {
+  id String @id @default(cuid())
+  tenantId String
+  variantId String
+  storeId String
+  previous Int
+  counted Int
+  difference Int
+  reason String @db.VarChar(500)
+  actorId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variant ProductVariant @relation(fields: [tenantId, variantId], references: [tenantId, id], onDelete: Restrict)
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, createdAt])
+}
+
+model ReturnRecord {
+  id String @id @default(cuid())
+  tenantId String
+  orderId String
+  replacementOrderId String? @unique
+  reason String @db.VarChar(500)
+  total Decimal @db.Decimal(12, 2)
+  cashDifference Decimal @default(0) @db.Decimal(12, 2)
+  actorId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  order Order @relation("OriginalReturn", fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  replacementOrder Order? @relation("ExchangeReplacement", fields: [tenantId, replacementOrderId], references: [tenantId, id], onDelete: Restrict)
+  items ReturnItem[]
+  @@unique([tenantId, id])
+  @@unique([tenantId, replacementOrderId])
+  @@index([tenantId, createdAt])
+}
+
+model ReturnItem {
+  id String @id @default(cuid())
+  tenantId String
+  returnId String
+  orderItemId String
+  quantity Int
+  restock Boolean
+  amount Decimal @db.Decimal(12, 2)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  returnRecord ReturnRecord @relation(fields: [tenantId, returnId], references: [tenantId, id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [tenantId, orderItemId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, returnId])
+}
+
+model LoyaltyProgram {
+  id String @id @default(cuid())
+  tenantId String @unique
+  enabled Boolean @default(false)
+  name String @default("Members club")
+  spendUnit Decimal @default(10) @db.Decimal(12, 2)
+  pointsPerUnit Int @default(1)
+  expiryDays Int @default(365)
+  birthdayPoints Int @default(0)
+  referralPoints Int @default(0)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tiers LoyaltyTier[]
+  @@unique([tenantId, id])
+}
+
+model LoyaltyTier {
+  id String @id @default(cuid())
+  tenantId String
+  programId String
+  name String
+  threshold Int
+  benefits String @db.VarChar(1000)
+  multiplier Int @default(1)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  program LoyaltyProgram @relation(fields: [tenantId, programId], references: [tenantId, id], onDelete: Cascade)
+  @@unique([tenantId, programId, threshold])
+}
+
+model LoyaltyAccount {
+  id String @id @default(cuid())
+  tenantId String
+  customerId String
+  cardCode String @unique @default(cuid())
+  points Int @default(0)
+  lifetimePoints Int @default(0)
+  enrolledAt DateTime @default(now())
+  consentAt DateTime
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  entries LoyaltyEntry[]
+  redemptions RewardRedemption[]
+  referrerAccountId String?
+  referrer LoyaltyAccount? @relation("Referrals",fields:[tenantId,referrerAccountId],references:[tenantId,id],onDelete:Restrict,onUpdate:NoAction)
+  referredAccounts LoyaltyAccount[] @relation("Referrals")
+  referralOrderId String?
+  @@unique([tenantId, customerId])
+  @@unique([tenantId, id])
+}
+
+model LoyaltyEntry {
+  id String @id @default(cuid())
+  tenantId String
+  accountId String
+  orderId String?
+  points Int
+  remaining Int @default(0)
+  expiredPoints Int @default(0)
+  type String
+  reason String @db.VarChar(500)
+  actorId String
+  expiresAt DateTime?
+  eventKey String?
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  account LoyaltyAccount @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  order Order? @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, accountId, createdAt])
+  @@unique([tenantId, accountId, eventKey])
+  @@index([expiresAt, remaining])
+}
+
+model Reward {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  pointsCost Int
+  discountValue Decimal @db.Decimal(12, 2)
+  active Boolean @default(true)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  redemptions RewardRedemption[]
+  @@unique([tenantId, id])
+}
+
+model RewardRedemption {
+  id String @id @default(cuid())
+  tenantId String
+  accountId String
+  rewardId String
+  orderId String? @unique
+  code String @unique
+  pointsCost Int
+  discountValue Decimal @db.Decimal(12, 2)
+  status String @default("ISSUED")
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  account LoyaltyAccount @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+  reward Reward @relation(fields: [tenantId, rewardId], references: [tenantId, id], onDelete: Restrict)
+  order Order? @relation("UsedReward", fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, id])
+  @@unique([tenantId, orderId])
+  @@index([tenantId, accountId])
+}
+
+model CustomerSession {
+  id String @id
+  tenantId String
+  customerId String
+  csrfToken String
+  expiresAt DateTime
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  @@index([expiresAt])
+}
+model CustomerAddress {
+  id String @id @default(cuid())
+  tenantId String
+  customerId String
+  label String
+  recipient String
+  street String @db.VarChar(500)
+  city String
+  postalCode String
+  phone String
+  country String @default("MA")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  @@unique([tenantId, id])
+  @@index([tenantId, customerId])
+}
+model CustomerConsent {
+  id String @id @default(cuid())
+  tenantId String
+  customerId String
+  purpose String
+  granted Boolean
+  version String
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  @@unique([tenantId, customerId, purpose])
+}
+model WishlistItem {
+  id String @id @default(cuid())
+  tenantId String
+  customerId String
+  productId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+  @@unique([tenantId, customerId, productId])
+}
+model DeliveryZone {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  cities Json
+  fee Decimal @db.Decimal(12, 2)
+  active Boolean @default(true)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orders Order[]
+  @@unique([tenantId, id])
+  @@index([tenantId, active])
+}
+model CMSPage {
+  id String @id @default(cuid())
+  tenantId String
+  slug String @default("home")
+  title String
+  seoTitle String @default("")
+  seoDescription String @default("") @db.VarChar(500)
+  design Json?
+  published Json?
+  publishedAt DateTime?
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sections CMSSection[]
+  @@unique([tenantId, slug])
+  @@unique([tenantId, id])
+}
+model CMSSection {
+  id String @id @default(cuid())
+  tenantId String
+  pageId String
+  kind String
+  position Int
+  title String
+  body String @db.VarChar(3000)
+  imageUrl String @db.VarChar(2048)
+  ctaLabel String
+  ctaHref String @db.VarChar(2048)
+  collection String
+  active Boolean @default(true)
+  startsAt DateTime?
+  endsAt DateTime?
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  page CMSPage @relation(fields: [tenantId, pageId], references: [tenantId, id], onDelete: Cascade)
+  @@index([tenantId, pageId, position])
+}
+model Notification {
+  id String @id @default(cuid())
+  tenantId String
+  customerId String?
+  title String
+  body String @db.VarChar(3000)
+  channel String @default("IN_APP")
+  kind String @default("TRANSACTIONAL")
+  status String @default("DELIVERED")
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer? @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade)
+  pushDeliveries PushDelivery[]
+  @@index([tenantId, customerId, createdAt])
+}
+model PushDevice {
+ id String @id @default(cuid())
+ tenantId String
+ customerId String
+ token String @db.VarChar(300)
+ active Boolean @default(true)
+ registeredAt DateTime @default(now())
+ customer Customer @relation(fields:[tenantId,customerId],references:[tenantId,id],onDelete:Cascade)
+ deliveries PushDelivery[]
+ @@unique([tenantId,customerId,token])
+}
+model PushDelivery {
+ id String @id @default(cuid())
+ notificationId String
+ deviceId String
+ status String @default("CLAIMED")
+ receiptId String?
+ createdAt DateTime @default(now())
+ checkedAt DateTime?
+ notification Notification @relation(fields:[notificationId],references:[id],onDelete:Cascade)
+ device PushDevice @relation(fields:[deviceId],references:[id],onDelete:Cascade)
+ @@unique([notificationId,deviceId])
+}
+model MediaAsset {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  storageKey String @unique
+  storageDriver String @default("LOCAL")
+  storageStatus String @default("READY")
+  uploadLeaseEndsAt DateTime?
+  mimeType String
+  bytes Int
+  visibility String @default("PUBLIC")
+  purpose String @default("CAMPAIGN")
+  customerId String?
+  expiresAt DateTime?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  inputJobs TryOnJob[] @relation("TryOnInput")
+  outputJobs TryOnJob[] @relation("TryOnOutput")
+  @@unique([tenantId, id])
+  @@index([tenantId, visibility, createdAt])
+  @@index([storageStatus, uploadLeaseEndsAt])
+}
+model StaffInvite {
+  id String @id @default(cuid())
+  tenantId String
+  email String
+  role Role
+  tokenHash String @unique
+  expiresAt DateTime
+  acceptedAt DateTime?
+  cancelledAt DateTime?
+  actorId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@index([tenantId, email])
+}
+model TryOnJob {
+  id String @id @default(cuid())
+  tenantId String
+  customerId String
+  productId String
+  photoId String
+  outputId String?
+  period String
+  status String @default("QUEUED")
+  provider String @default("FAL")
+  providerRequestId String? @unique
+  garmentUrl String @db.VarChar(2048)
+  consentVersion String
+  errorCode String @default("")
+  creditedBack Boolean @default(false)
+  leaseToken String?
+  leaseUntil DateTime?
+  expiresAt DateTime
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict)
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict)
+  photo MediaAsset @relation("TryOnInput", fields: [tenantId, photoId], references: [tenantId, id], onDelete: Restrict)
+  output MediaAsset? @relation("TryOnOutput", fields: [tenantId, outputId], references: [tenantId, id], onDelete: Restrict)
+  entries AICreditEntry[]
+  @@unique([tenantId, id])
+  @@index([status, leaseUntil, createdAt])
+  @@index([tenantId, customerId, createdAt])
+}
+model AIUsage {
+  id String @id @default(cuid())
+  tenantId String
+  period String
+  used Int @default(0)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  @@unique([tenantId, period])
+}
+model AICreditEntry {
+  id String @id @default(cuid())
+  tenantId String
+  jobId String
+  period String
+  type String
+  credits Int
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  job TryOnJob @relation(fields: [tenantId, jobId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, jobId, type])
+  @@index([tenantId, period])
+}
+model SupportTicket {
+  id String @id @default(cuid())
+  tenantId String
+  subject String @db.VarChar(150)
+  priority String @default("MEDIUM")
+  status String @default("OPEN")
+  actorId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  messages SupportMessage[]
+  @@unique([tenantId, id])
+  @@index([status, createdAt])
+}
+model SupportMessage {
+  id String @id @default(cuid())
+  tenantId String
+  ticketId String
+  actorId String
+  authorName String
+  body String @db.VarChar(5000)
+  internal Boolean @default(false)
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  ticket SupportTicket @relation(fields: [tenantId, ticketId], references: [tenantId, id], onDelete: Restrict)
+  @@index([tenantId, ticketId, createdAt])
+}
+model CashSession {
+  id String @id @default(cuid())
+  tenantId String
+  storeId String
+  activeStoreId String?
+  openedBy String
+  openedByName String
+  closedBy String?
+  openingCash Decimal @db.Decimal(12,2)
+  countedCash Decimal? @db.Decimal(12,2)
+  expectedCash Decimal? @db.Decimal(12,2)
+  variance Decimal? @db.Decimal(12,2)
+  closingNote String @default("") @db.VarChar(1000)
+  openedAt DateTime @default(now())
+  closedAt DateTime?
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  store Store @relation(fields:[tenantId,storeId],references:[tenantId,id],onDelete:Restrict)
+  movements CashMovement[]
+  @@unique([tenantId,id])
+  @@unique([tenantId,activeStoreId])
+  @@index([tenantId,openedAt])
+}
+model CashMovement {
+  id String @id @default(cuid())
+  tenantId String
+  sessionId String
+  orderId String?
+  actorId String
+  type String
+  amount Decimal @db.Decimal(12,2)
+  reason String @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  session CashSession @relation(fields:[tenantId,sessionId],references:[tenantId,id],onDelete:Restrict)
+  order Order? @relation(fields:[tenantId,orderId],references:[tenantId,id],onDelete:Restrict)
+  @@index([tenantId,sessionId,createdAt])
+}
+model Coupon {
+  id String @id @default(cuid())
+  tenantId String
+  code String @db.VarChar(50)
+  name String @db.VarChar(100)
+  kind String
+  value Decimal @db.Decimal(12,2)
+  minimum Decimal @default(0) @db.Decimal(12,2)
+  channel String @default("ALL")
+  maximumUses Int @default(100)
+  used Int @default(0)
+  startsAt DateTime
+  endsAt DateTime
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  orders Order[]
+  @@unique([tenantId,id])
+  @@unique([tenantId,code])
+}
+model Campaign {
+  id String @id @default(cuid())
+  tenantId String
+  name String @db.VarChar(100)
+  title String @db.VarChar(160)
+  body String @db.VarChar(2000)
+  segment String
+  status String @default("DRAFT")
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  lastCustomerId String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  deliveries CampaignDelivery[]
+  @@unique([tenantId,id])
+  @@index([status,scheduledAt])
+}
+model CampaignDelivery {
+  id String @id @default(cuid())
+  tenantId String
+  campaignId String
+  customerId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  campaign Campaign @relation(fields:[tenantId,campaignId],references:[tenantId,id],onDelete:Restrict)
+  customer Customer @relation(fields:[tenantId,customerId],references:[tenantId,id],onDelete:Restrict)
+  @@unique([tenantId,campaignId,customerId])
+}
+model SubscriptionInvoice {
+  id String @id @default(cuid())
+  tenantId String
+  planId String
+  number String @unique
+  planName String
+  amount Decimal @db.Decimal(12,2)
+  currency String @default("MAD")
+  periodStart DateTime
+  periodEnd DateTime
+  status String @default("PENDING")
+  activationStatus String @default("PENDING")
+  paidAt DateTime?
+  paymentMethod String @default("")
+  paymentReference String @default("") @db.VarChar(200)
+  checkoutSessionId String?
+  providerInvoiceId String? @unique
+  checkoutRequestedAt DateTime?
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  plan SubscriptionPlan @relation(fields:[planId],references:[id],onDelete:Restrict)
+  events BillingEvent[]
+  @@unique([tenantId,id])
+  @@index([tenantId,createdAt])
+}
+model BillingEvent {
+  id String @id
+  tenantId String
+  invoiceId String
+  sessionId String
+  status String
+  receivedAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  invoice SubscriptionInvoice @relation(fields:[tenantId,invoiceId],references:[tenantId,id],onDelete:Restrict)
+  @@index([tenantId,receivedAt])
+}
+model RecurringBilling {
+  id String @id @default(cuid())
+  tenantId String
+  planId String
+  planName String
+  monthlyPrice Decimal @db.Decimal(12,2)
+  currency String @default("MAD")
+  attemptKey String
+  checkoutSessionId String?
+  checkoutRequestedAt DateTime?
+  customerId String? @unique
+  subscriptionId String? @unique
+  status String @default("ENROLLING")
+  cancelAtPeriodEnd Boolean @default(false)
+  currentPeriodEnd DateTime?
+  lastStateEvent Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  plan SubscriptionPlan @relation(fields:[planId],references:[id],onDelete:Restrict)
+  events RecurringBillingEvent[]
+  @@unique([tenantId,id])
+  @@index([tenantId,createdAt])
+}
+model RecurringBillingEvent {
+  id String @id
+  tenantId String
+  billingId String
+  objectId String
+  type String
+  status String
+  receivedAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Restrict)
+  billing RecurringBilling @relation(fields:[tenantId,billingId],references:[tenantId,id],onDelete:Restrict)
+  @@index([tenantId,receivedAt])
+}
